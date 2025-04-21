@@ -8,6 +8,11 @@
   "files": [
     "dist"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jaktestowac/smart-retry.git"
+  },
+  "homepage": "https://github.com/jaktestowac/smart-retry",
   "scripts": {
     "build": "tsup",
     "prepare": "tsup",
