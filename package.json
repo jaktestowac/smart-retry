@@ -1,0 +1,36 @@
+{
+  "name": "smart-retry",
+  "version": "1.0.1",
+  "description": "Smart utility to retry flaky sync/async operations with delay, backoff, and retry hooks.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepare": "tsup",
+    "test": "vitest run",
+    "npm:patch": "npm version patch",
+    "npm:publish": "npm publish --access public"
+  },
+  "keywords": [
+    "retry",
+    "utility",
+    "automation",
+    "typescript",
+    "async",
+    "backoff",
+    "resilience",
+    "error-handling"
+  ],
+  "author": "jaktestowac.pl",
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^7.2.0",
+    "typescript": "^5.3.3",
+    "prettier": "3.5.3",
+    "vitest": "^3.1.2"
+  }
+}
