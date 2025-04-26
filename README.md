@@ -10,7 +10,7 @@
 - 🔁 Configurable number of retries and delay
 - ⏱️ Exponential backoff and custom schedules
 - 🎲 Jitter and randomized backoff strategies
-- 🛑 Abort/cancel support with `AbortSignal`
+- 🛑 Multiple cancellation options (AbortSignal, predicate, token)
 - 🔍 `onRetry` hook for logging or metrics
 - ⚠️ Optional error filtering with `shouldRetry`
 - 🧩 Retry until condition or with custom delay logic
@@ -31,7 +31,7 @@ import { retry } from "smart-retry";
 
 async function fetchData() {
   const res = await fetch("https://example.com/api");
-  if (!res.ok) throw new Error("API error");
+  if (!res.ok) throw new Error("API error"); // by default, all errors are retryable
   return res.json();
 }
 
@@ -44,6 +44,30 @@ const result = await retry(() => fetchData(), {
   },
 });
 ```
+
+## 🔄 How Retry Works
+
+The retry mechanism in this library follows a simple but powerful pattern:
+
+1. **Execution**: The library attempts to run your function (sync or async).
+2. **Error Handling**:
+   - If the function succeeds (returns a value without throwing), the result is returned immediately.
+   - If the function throws an error:
+     - The library checks if another retry should be attempted based on the `retries` count and `shouldRetry` predicate.
+     - If no more retries are allowed or `shouldRetry` returns false, the error is thrown.
+3. **Notification**: If a retry is needed, the `onRetry` callback is invoked with the error and attempt number.
+4. **Delay**: The library waits for a specified delay duration before the next attempt.
+   - For regular retry: The delay increases exponentially by the specified `factor`.
+   - For jitter: Random variation is added to prevent "thundering herd" problems.
+   - For scheduled retries: The delay follows a pre-defined array of values.
+5. **Cancellation**: Some retry functions support cancellation via:
+   - AbortSignal: Standard web API for cancellation
+   - Predicate function: Custom function that returns true when retries should stop
+   - Cancellation token: Object with a boolean property to cancel retries
+
+All retry functions can handle both synchronous and asynchronous target functions, automatically wrapping results in promises for a consistent async interface.
+
+---
 
 ## ⚙️ API Overview
 
@@ -64,6 +88,8 @@ const result = await retry(() => fetchData(), {
 - **`retryWithTimeout`**: Retries until a total timeout is reached.
 - **`retryWithSchedule`**: Retries using a custom array of delays.
 - **`retryWithAbortSignal`**: Supports aborting with an `AbortSignal`.
+- **`retryWithPredicate`**: Stops retrying when a predicate function returns true.
+- **`retryWithCancellationToken`**: Stops retrying when a token object's `cancelled` property is true.
 - **`retryWithMaxTotalAttempts`**: Specify max total attempts (not just retries).
 - **`retryWithPredicateDelay`**: Custom delay logic per attempt.
 - **`retryWithRandomizedBackoff`**: Decorrelated jitter/randomized backoff.
@@ -160,6 +186,62 @@ try {
 } catch (err) {
   if (controller.signal.aborted) {
     console.log("Retry aborted by user.");
+  } else {
+    console.error("Retry failed:", err);
+  }
+}
+```
+
+### Retry with Predicate
+
+```typescript
+import { retryWithPredicate } from "smart-retry";
+
+// Flag to stop retrying when set to true
+let stopRetrying = false;
+
+// Set up a separate timeout that will stop retries after 1 second
+setTimeout(() => {
+  stopRetrying = true;
+}, 1000);
+
+try {
+  await retryWithPredicate(
+    () => fetchFromSlowAPI(),
+    () => stopRetrying, // Stop when our flag becomes true
+    { retries: 10, delay: 200 },
+  );
+} catch (err) {
+  if (stopRetrying) {
+    console.log("Retry stopped by predicate");
+  } else {
+    console.error("Retry failed:", err);
+  }
+}
+```
+
+### Retry with Cancellation Token
+
+```typescript
+import { retryWithCancellationToken } from "smart-retry";
+
+// Create a token object with a 'cancelled' property
+const token = { cancelled: false };
+
+// Set up a separate process that can cancel the operation
+setTimeout(() => {
+  token.cancelled = true;
+}, 1000);
+
+try {
+  await retryWithCancellationToken(() => fetchSomething(), {
+    retries: 5,
+    delay: 200,
+    cancellationToken: token,
+  });
+} catch (err) {
+  if (token.cancelled) {
+    console.log("Retry cancelled via token");
   } else {
     console.error("Retry failed:", err);
   }

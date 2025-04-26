@@ -22,6 +22,27 @@ test("retryWithAbortSignal aborts retries when signal is triggered", async () =>
   expect(counter).toBeGreaterThanOrEqual(1);
 });
 
+test("retryWithAbortSignal aborts retries when signal is triggered (longer)", async () => {
+  // Arrange
+  let counter = 0;
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 500);
+
+  // Act
+  await expect(
+    retryWithAbortSignal(
+      () => {
+        counter++;
+        throw new Error("fail");
+      },
+      { retries: 5, delay: 20, signal: controller.signal },
+    ),
+  ).rejects.toThrow(/Aborted|fail/);
+
+  // Assert
+  expect(counter).toBeGreaterThanOrEqual(1);
+});
+
 test("retryWithAbortSignal succeeds if not aborted", async () => {
   // Arrange
   let counter = 0;

@@ -332,3 +332,127 @@ export async function retryUntilCondition<T>(
   }
   throw new Error("Retry until condition failed unexpectedly.");
 }
+
+/**
+ * Retries the provided function until a predicate function returns true, which stops the retry process.
+ *
+ * @param fn - The function to execute. Can be synchronous or asynchronous.
+ * @param shouldStop - A function that returns true when retry should stop.
+ * @param options - Retry configuration options.
+ *   - retries: Maximum number of retry attempts (default: 3).
+ *   - delay: Initial delay in milliseconds before the first retry (default: 500).
+ *   - factor: Multiplier for delay after each failed attempt (default: 2).
+ *   - onRetry: Optional callback invoked after each failed attempt.
+ *   - shouldRetry: Optional predicate to determine if a retry should occur based on the error.
+ * @returns The result of the function if successful.
+ * @throws The last error encountered if all retries fail, shouldRetry returns false, or shouldStop returns true.
+ */
+export async function retryWithPredicate<T>(
+  fn: () => Promise<T> | T,
+  shouldStop: () => boolean,
+  options: RetryOptions = {},
+): Promise<T> {
+  const { retries = 3, delay = 500, factor = 2, onRetry, shouldRetry = () => true } = options;
+  let attempt = 0;
+  let currentDelay = delay;
+  let lastError: Error | null = null;
+
+  while (attempt <= retries) {
+    if (shouldStop()) {
+      throw new Error("Retry stopped by predicate");
+    }
+
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err as Error;
+
+      if (attempt === retries || !shouldRetry(err)) {
+        throw err;
+      }
+
+      if (shouldStop()) {
+        throw new Error("Retry stopped by predicate");
+      }
+
+      onRetry?.(err, attempt + 1);
+      await new Promise<void>((res) => {
+        const timeoutId = setTimeout(res, currentDelay);
+        // Check periodically if shouldStop returns true
+        const intervalId = setInterval(() => {
+          if (shouldStop()) {
+            clearTimeout(timeoutId);
+            clearInterval(intervalId);
+            res();
+          }
+        }, 100);
+
+        // Ensure interval is cleared after timeout completes
+        setTimeout(() => clearInterval(intervalId), currentDelay);
+      });
+
+      if (shouldStop()) {
+        throw new Error("Retry stopped by predicate");
+      }
+
+      currentDelay *= factor;
+      attempt++;
+    }
+  }
+
+  throw lastError || new Error("Retry with predicate failed unexpectedly.");
+}
+
+/**
+ * Retries the provided function and allows cancellation via a token object.
+ *
+ * @param fn - The function to execute. Can be synchronous or asynchronous.
+ * @param options - Retry configuration options.
+ *   - retries: Maximum number of retry attempts (default: 3).
+ *   - delay: Initial delay in milliseconds before the first retry (default: 500).
+ *   - factor: Multiplier for delay after each failed attempt (default: 2).
+ *   - onRetry: Optional callback invoked after each failed attempt.
+ *   - shouldRetry: Optional predicate to determine if a retry should occur based on the error.
+ *   - cancellationToken: An object with a 'cancelled' property that stops retry when set to true.
+ * @returns The result of the function if successful.
+ * @throws The last error encountered if all retries fail, shouldRetry returns false, or cancellation is requested.
+ */
+export async function retryWithCancellationToken<T>(
+  fn: () => Promise<T> | T,
+  options: RetryOptions & { cancellationToken: { cancelled: boolean } },
+): Promise<T> {
+  const { retries = 3, delay = 500, factor = 2, onRetry, shouldRetry = () => true, cancellationToken } = options;
+  let attempt = 0;
+  let currentDelay = delay;
+
+  while (attempt <= retries) {
+    if (cancellationToken.cancelled) throw new Error("Retry cancelled");
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries || !shouldRetry(err) || cancellationToken.cancelled) {
+        throw err;
+      }
+      onRetry?.(err, attempt + 1);
+      await new Promise<void>((res) => {
+        const timeoutId = setTimeout(res, currentDelay);
+        // Check periodically if the token is cancelled
+        const intervalId = setInterval(() => {
+          if (cancellationToken.cancelled) {
+            clearTimeout(timeoutId);
+            clearInterval(intervalId);
+            res();
+          }
+        }, 100);
+
+        // Ensure interval is cleared after timeout completes
+        setTimeout(() => clearInterval(intervalId), currentDelay);
+      });
+
+      currentDelay *= factor;
+      attempt++;
+    }
+  }
+
+  throw new Error("Retry with cancellation token failed unexpectedly.");
+}
