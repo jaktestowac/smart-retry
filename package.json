@@ -18,6 +18,7 @@
     "prepare": "tsup",
     "test": "vitest run",
     "npm:patch": "npm version patch",
+    "npm:minor": "npm version minor",
     "npm:publish": "npm publish --access public"
   },
   "keywords": [
