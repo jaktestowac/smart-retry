@@ -94,6 +94,7 @@ All retry functions can handle both synchronous and asynchronous target function
 - **`retryWithPredicateDelay`**: Custom delay logic per attempt.
 - **`retryWithRandomizedBackoff`**: Decorrelated jitter/randomized backoff.
 - **`retryUntilCondition`**: Retries until a user-provided predicate returns true.
+- **`retryWithCustomExecution`**: Uses custom execution logic instead of try/catch to evaluate success.
 
 ---
 
@@ -299,6 +300,62 @@ await retryWithMaxTotalAttempts(
   5, // max total attempts (including the first)
   { delay: 100 },
 );
+```
+
+### Retry with Custom Execution
+
+You can also use a custom execution function to handle the retry logic. This is useful when you want to control how the success or failure of the operation is determined.
+
+```typescript
+import { retryWithCustomExecution } from "smart-retry";
+
+// Define types for our execution function
+type ExecutionResult<T> = {
+  success: boolean;
+  value?: T;
+  error?: Error;
+};
+
+// Create a custom execution function that checks return values
+// instead of relying on exceptions
+async function customAPIExecute<T>(fn: () => Promise<Response>): Promise<ExecutionResult<T>> {
+  try {
+    const response = await fn();
+    // Consider HTTP 2xx status codes as success
+    if (response.status >= 200 && response.status < 300) {
+      return {
+        success: true,
+        value: response as unknown as T,
+      };
+    }
+    // Consider any other status code as a failure
+    return {
+      success: false,
+      error: new Error(`API returned status: ${response.status}`),
+      value: response as unknown as T, // You can still include the value for the retry handler
+    };
+  } catch (error) {
+    // Handle network errors or other exceptions
+    return { success: false, error: error as Error };
+  }
+}
+
+// Use the custom execution logic with retries
+try {
+  const result = await retryWithCustomExecution<Response>(() => fetch("https://api.example.com/data"), {
+    execute: customAPIExecute,
+    retries: 3,
+    delay: 200,
+    onRetry: (err, attempt) => {
+      console.log(`Custom execution retry #${attempt}: ${err.message}`);
+    },
+  });
+
+  // Process successful result
+  const data = await result.json();
+} catch (err) {
+  console.error("All retry attempts failed:", err);
+}
 ```
 
 ---

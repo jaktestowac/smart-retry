@@ -456,3 +456,67 @@ export async function retryWithCancellationToken<T>(
 
   throw new Error("Retry with cancellation token failed unexpectedly.");
 }
+
+/**
+ * Interface for the result of custom execution
+ */
+export interface ExecutionResult<T> {
+  success: boolean;
+  value?: T;
+  error?: unknown;
+}
+
+/**
+ * Interface for custom execution options
+ */
+export interface CustomExecutionOptions<T> extends RetryOptions {
+  /**
+   * Custom execution function that evaluates whether the operation succeeded
+   * @param fn The function to execute
+   * @returns ExecutionResult with success flag, value (if successful) or error (if failed)
+   */
+  execute: (fn: () => any) => Promise<ExecutionResult<T>>;
+}
+
+/**
+ * Retries the provided function using custom execution logic instead of try/catch.
+ * This allows for retrying based on return values rather than exceptions.
+ *
+ * @param fn - The function to execute. Can be synchronous or asynchronous.
+ * @param options - Custom execution options plus standard retry options.
+ *   - execute: Custom execution function that returns an ExecutionResult.
+ *   - retries: Maximum number of retry attempts (default: 3).
+ *   - delay: Initial delay in milliseconds before the first retry (default: 500).
+ *   - factor: Multiplier for delay after each failed attempt (default: 2).
+ *   - onRetry: Optional callback invoked after each failed attempt.
+ * @returns The result value if successful.
+ * @throws The last error encountered if all retries fail.
+ */
+export async function retryWithCustomExecution<T>(fn: () => any, options: CustomExecutionOptions<T>): Promise<T> {
+  const { retries = 3, delay = 500, factor = 2, onRetry, execute } = options;
+  let attempt = 0;
+  let currentDelay = delay;
+  let lastError: unknown = null;
+
+  while (attempt <= retries) {
+    const result = await execute(fn);
+
+    if (result.success) {
+      return result.value as T;
+    }
+
+    lastError = result.error || new Error("Operation failed");
+
+    if (attempt === retries) {
+      if (result.error) throw result.error;
+      throw new Error("All retry attempts failed");
+    }
+
+    onRetry?.(result.error || new Error("Operation failed"), attempt + 1);
+    await new Promise((res) => setTimeout(res, currentDelay));
+    currentDelay *= factor;
+    attempt++;
+  }
+
+  throw lastError || new Error("Retry with custom execution failed unexpectedly.");
+}
