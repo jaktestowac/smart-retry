@@ -307,14 +307,7 @@ await retryWithMaxTotalAttempts(
 You can also use a custom execution function to handle the retry logic. This is useful when you want to control how the success or failure of the operation is determined.
 
 ```typescript
-import { retryWithCustomExecution } from "smart-retry";
-
-// Define types for our execution function
-type ExecutionResult<T> = {
-  success: boolean;
-  value?: T;
-  error?: Error;
-};
+import { retryWithCustomExecution, ExecutionResult } from "smart-retry";
 
 // Create a custom execution function that checks return values
 // instead of relying on exceptions
