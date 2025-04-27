@@ -1,6 +1,6 @@
 {
   "name": "smart-retry",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Smart utility to retry flaky sync/async operations with delay, backoff, and retry hooks.",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
